@@ -1,0 +1,21 @@
+# Unity files
+/__pycache__/
+/logs/
+/models/
+
+# Memory dumps and logs
+*.pyc
+*.pid
+*.0
+*.csv
+*.pkl
+*.zip
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+bin/Release/net48/ScpRLBridge.pdb
