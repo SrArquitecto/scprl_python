@@ -11,7 +11,7 @@ from stable_baselines3.common.callbacks import (
 from stable_baselines3.common.torch_layers import BaseFeaturesExtractor
 # 🛠️ AÑADIDO: Importamos VecNormalize junto a los otros wrappers de vectores
 from stable_baselines3.common.vec_env import DummyVecEnv, VecTransposeImage, VecNormalize
-from scp_env import SCPClassDEnv
+from scp_env2 import SCPClassDEnv
 
 os.makedirs("models/best", exist_ok=True)
 os.makedirs("logs/tb",     exist_ok=True)

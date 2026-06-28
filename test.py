@@ -15,7 +15,7 @@ from stable_baselines3.common.callbacks import (
 # Cambia 'nombre_de_tu_archivo' por el nombre real de tu script de entorno
 # y 'SCPEnv' por el nombre de tu clase.
 try:
-    from scp_env import SCPClassDEnv  # 👈 Cambia esto si tu archivo/clase se llaman diferente
+    from scp_env2 import SCPClassDEnv  # 👈 Cambia esto si tu archivo/clase se llaman diferente
     print("✅ Archivo de entorno importado correctamente.")
 except Exception as e:
     print("❌ ERROR CRÍTICO al importar el entorno:")

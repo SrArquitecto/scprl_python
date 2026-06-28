@@ -7,9 +7,9 @@ from .tipos import (
     N_ZONAS, N_HABITACIONES, N_GRAPH_NODES, N_GRAPH_FEAT, N_GRAPH_ADJ,
     N_GRAPH_MASK, VEC_DIM, HISTORY_LEN, TOTAL_OBS_DIM
 )
-class Observation:
+class Observacion:
     
-    def __initi__(self):
+    def __init__(self):
         self.DAMAGE_TYPE_MAP = {
             "None": 0.0, "Firearm": 1.0, "Explosion": 2.0,
             "Scp": 3.0, "Fall": 4.0, "Status": 5.0, "Unknown": 6.0
@@ -51,7 +51,7 @@ class Observation:
             "Pocket": 65, "Surface": 66
         }
     
-    def _empty_obs(self):
+    def empty_obs(self):
         return np.zeros(TOTAL_OBS_DIM, dtype=np.float32)
     
     def encode_vector(self, s):

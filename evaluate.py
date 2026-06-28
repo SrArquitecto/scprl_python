@@ -1,5 +1,5 @@
 from stable_baselines3 import PPO
-from scp_env import SCPClassDEnv
+from scp_env2 import SCPClassDEnv
 
 env   = SCPClassDEnv()
 model = PPO.load("models/best/best_model")

@@ -15,10 +15,12 @@ import orjson
 from stable_baselines3.common.torch_layers import BaseFeaturesExtractor
 # 🛠️ AÑADIDO: Importamos VecNormalize junto a los otros wrappers de vectores
 from stable_baselines3.common.vec_env import DummyVecEnv, VecTransposeImage, VecNormalize
-from scp_env import SCPClassDEnv
+from scp_env2 import SCPClassDEnv
 
 os.makedirs("models/best", exist_ok=True)
 os.makedirs("logs/tb",     exist_ok=True)
+
+from scp_env.scp_env import Scp_env
 
 # ── Extractor CNN + MLP combinado ─────────────────────────────────────────
 import socket
@@ -407,7 +409,7 @@ def make_env(i):
     """Función factoría para crear cada entorno de forma aislada."""
     def _init():
         # IMPORTANTE: La conexión al socket debe ocurrir AQUÍ, dentro del proceso hijo
-        env = SCPClassDEnv(tcp_host='localhost', tcp_port=7900, agent_id=i)
+        env = Scp_env(host='localhost', port=7900, agent_id=i, role="classd")
         # Cada proceso registra sus propias métricas para TensorBoard
         env = Monitor(env, filename=f"logs/train_proc_{i}")
         return env

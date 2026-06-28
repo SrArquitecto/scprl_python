@@ -7,13 +7,13 @@ import orjson
 
 class Comunicacion:
 
-    def __init__(self, host = "localhost", port = 7900, agent_id = 0, num_agents = 4):
+    def __init__(self, host = "localhost", port = 7900, agent_id = 0, role = "classd"):
         self.agent_id = agent_id
         self.host = host
         self.port = port
-        self.num_agents = num_agents
         self.sock = None
-
+        self.role = role
+        
     def conexion(self):
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         # Desactivar el algoritmo de Nagle para enviar/recibir datos instantáneamente sin agrupar
@@ -21,7 +21,7 @@ class Comunicacion:
         self.sock.settimeout(10.0)  # timeout para no bloquear infinitamente si el plugin no responde
         self.sock.connect((self.host, self.port))
         # Enviar Handshake
-        self.sock.sendall(f"INIT_{self.agent_id}_classd\n".encode('utf-8'))
+        self.sock.sendall(f"INIT_{self.agent_id}_{self.role}\n".encode('utf-8'))
 
         # Crear un archivo virtual para usar readline de forma segura
         sock_file = self.sock.makefile('r', encoding='utf-8')
@@ -53,8 +53,26 @@ class Comunicacion:
         La ejecución física ocurre en el C# (StateManager.cs).
         """
         msg = f"ACTION:{a}\n"
-        self.sock.sendall(msg.encode('utf-8'))
-    
+        return self.enviar_solicitud(msg.encode('utf-8'))
+        #self.sock.sendall(msg.encode('utf-8'))
+        
+    def solicitar_estado(self, retries=5):
+        #print("1")
+        try:
+            resultado = self.enviar_solicitud(b"GET_STATE\n")
+            #print("1.5 - Respuesta recibida con éxito")
+            #print(resultado)
+            return resultado
+        except Exception as e:
+            print(f"1.5 - ERROR CRÍTICO EN REQUEST: {e}")
+            raise e
+        
+    def respawn(self):
+        try:
+            self.enviar_solicitud(b"RESPAWN\n")
+        except Exception:
+            pass
+        
     def reconectar(self, max_retries=60, retry_delay=3.0):
         """Cierra el socket viejo y reconecta usando RECONNECT_.
         El plugin responde REGISTERED si el bucle maestro está activo, o WAIT si está parado.
@@ -146,6 +164,7 @@ class Comunicacion:
                     time.sleep(delay)
                     continue
                 raise
-
-
+    
+    def cerrar(self):
+        self.sock.close()
     
