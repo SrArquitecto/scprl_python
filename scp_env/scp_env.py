@@ -10,7 +10,6 @@ import mss
 from Xlib import display
 import cv2
 from sympy import rad
-from input_controller import InputController
 from gymnasium import spaces
 import random
 import mss
@@ -52,6 +51,7 @@ class Scp_env(gym.Env):
         self._max_steps_spawn = 450
         self.mix_probability = 0.1
         
+        self.current_role = "ClassD"
         
         self._ep_steps       = 0
         self._ep_reward = 0
@@ -67,7 +67,7 @@ class Scp_env(gym.Env):
         if not hasattr(self, '_gc_counter'):
             self._gc_counter = 0
         self._gc_counter += 1
-        if self._gc_counter >= 500:
+        if self._gc_counter >= 512:
             self._gc_counter = 0
             import gc
             gc.collect()
@@ -85,7 +85,9 @@ class Scp_env(gym.Env):
             else:
                 print(f"❌ Agente {self.agent_id} no pudo reconectar. Devolviendo obs vacía.")
                 return self.observacion.empty_obs(), 0.0, True, False, {}
-
+        
+        self.current_role = s.get("Role", "ClassD")
+        
         # ── DETECTOR DE MUERTE ───────────────────────────────────────────────
         # Si el bot está muerto (Health=0) continuamos el episodio sin interrumpirlo:
         # devolvemos obs vacía (shape correcta) y reward=0 hasta que C# lo respawnee.
@@ -177,6 +179,8 @@ class Scp_env(gym.Env):
         if self._ep_steps > 0:
             print(f"  Ep: {self._ep_steps} pasos | reward: {self._ep_reward:+.1f}")
 
+        self.current_role = "ClassD" 
+        
         self._visitadas = set()
         self._min_dist_to_exit = None
         self._pasos_encerrado = 0

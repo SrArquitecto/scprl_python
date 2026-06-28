@@ -5,7 +5,7 @@ from gymnasium import spaces
 
 
 # ── Acciones (idénticas a v3) ────────────────────────────────────────────
-N_ACTIONS = 13
+N_ACTIONS = 16
 
 ACTION_NAMES = {
     0: "W",           # adelante
@@ -55,7 +55,7 @@ N_NAV_FEAT      = 8     # wall×4 + door dist/yaw + area + shape (room nav)
 # 5 frames apilados
 HISTORY_LEN = 5
 
-N_ACTIONS = 13
+N_ACTIONS = 16
 
 VEC_DIM2 = (
     N_BASE
