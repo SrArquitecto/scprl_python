@@ -24,7 +24,7 @@ from .comunicacion import Comunicacion
 from .observaciones import Observacion
 from .state_stacker import StateStacker
 from .tipos import (HISTORY_LEN, VEC_DIM, N_ACTIONS, TOTAL_OBS_DIM)
-
+from .reward_manager.reward_manager import RewardManager
 
 class Scp_env(gym.Env):
     
@@ -43,7 +43,7 @@ class Scp_env(gym.Env):
         self.comunicacion = Comunicacion(host, port, agent_id, role)
         self.observacion = Observacion()
         self.stacker = StateStacker(HISTORY_LEN, VEC_DIM)
-        
+        self.reward_manager = RewardManager()
         
         self._max_steps = 10000
         self._max_steps_ep = 512
@@ -97,43 +97,18 @@ class Scp_env(gym.Env):
 
         pos = np.array([float(s["PosX"]), float(s["PosY"]), float(s["PosZ"])])
 
-        # ── DETECTOR DE TELEPORT (respawn/reset de ronda) ─────────────────────
-        # Si la posición salta más de 8m en un step, es físicamente imposible
-        # (incluso sprint+jump+colisión no da más de ~5m/step). Eso significa
-        # que la ronda cambió mientras el episodio seguía corriendo: hay que
-        # invalidar las anclas para que se re-anclen en la nueva celda.
-        #if self._prev_pos is not None:
-        #    teleport_dist = np.linalg.norm(pos - self._prev_pos)
-        #    if teleport_dist > 8.0:
-        #        print(f"🔄 [Paso {self._ep_steps}] Teleport detectado ({teleport_dist:.1f}m). Reseteando anclas...")
-        #        # Anclas legacy (usadas por _reward2 currículum 2/3)
-        #        self._left_spawn_room = False
-        #        self._saw_exit_door = False
-        #        self._stuck = 0
-        #        self._pos_history = []
-        #        # Anclas de la nueva state machine (currículum 1)
-        #        self._ce_state = "INIT"
-        #        self._ce_door_pos = None
-        #        self._ce_prev_door_dist = None
-        #        self._ce_door_was_open = False
-        #        self._ce_was_facing_door = False
-        #        self._ce_at_door_counter = 0
-        #        self._ce_localize_step = None
-        #        self._ce_open_step = None
-        #        self._ce_cross_step = None
-        #        self._ce_initial_spawn_pos = None
-        #        self._ce_door_opened = False
-
-
         obs = self._get_obs(s)
         
-
+        info_entorno = {"curriculum_level": self._curriculum_level} 
+        
+        # 3. 🌟 LLAMADA DINÁMICA AL REWARD MANAGER
+        reward = self.reward_manager.calcular_reward(s, action, info_entorno, self._ep_steps)
         #if self._curriculum_level == 1:
         #    res_reward = self._reward(s, action) 
         #else:
         #    res_reward = self._reward2(s, action)
         
-        reward = 0 #float(res_reward) #+ time_penalty
+        #reward = 0 #float(res_reward) #+ time_penalty
         terminated = bool(s.get("Done", False))
         #print(self._ep_reward)
         self._ep_reward += reward
@@ -175,7 +150,9 @@ class Scp_env(gym.Env):
         
     def reset(self, seed=None, options=None):
         super().reset(seed=seed)
-
+        
+        self.reward_manager.reset_fase_actual()
+        
         if self._ep_steps > 0:
             print(f"  Ep: {self._ep_steps} pasos | reward: {self._ep_reward:+.1f}")
 
