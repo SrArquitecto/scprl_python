@@ -44,11 +44,11 @@ ACTION_MASKS = {
     # SCPs — curriculum 2 (esqueleto: activar cuando se implementen)
     # Acciones 0-10 comunes, 11-12 desactivadas (no cogen items/keycards),
     # 13-15 activas según habilidades del SCP concreto.
-    "Scp049":  [True]*11 + [False]*2 + [True,  True,  False],  # primaria=paro cardiaco, secundaria=zombificar
-    "Scp096":  [True]*11 + [False]*2 + [True,  False, False],  # primaria=rage
-    "Scp173":  [True]*11 + [False]*2 + [True,  False, False],  # primaria=snap
-    "Scp106":  [True]*11 + [False]*2 + [True,  True,  False],  # primaria=atrapar, secundaria=bolsillo
-    "Scp939":  [True]*11 + [False]*2 + [True,  False, False],  # primaria=morder
+    "Scp049":  [True]*5 + [False] + [True]*5 + [False]*2 + [True,  True,  False],  # primaria=paro cardiaco, secundaria=zombificar
+    "Scp096":  [True]*5 + [False] + [True]*5 + [False]*2 + [True,  False, False],  # primaria=rage
+    "Scp173":  [True]*5 + [False] + [True]*5 + [False]*2 + [True,  False, False],  # primaria=snap
+    "Scp106":  [True]*5 + [False] + [True]*5 + [False]*2 + [True,  True,  False],  # primaria=atrapar, secundaria=bolsillo
+    "Scp939":  [True]*5 + [False] + [True]*5 + [False]*2 + [True,  False, False],  # primaria=morder
     "Scp079":  [True]*5  + [False]*6 + [False]*2 + [True, True, True],  # solo mover cam + habilidades
  
     # Fallback para roles desconocidos — solo acciones básicas seguras
