@@ -18,7 +18,7 @@ class RewardManager():
     def reset_fase_actual(self):
         self.fases[self.fase_actual].reset()
 
-    def calcular_reward(self, s: dict, action: int, info_entorno: dict, pasos) -> float:
+    def calcular_reward(self, s: dict, action: int, info_entorno: dict, pasos) -> tuple[float, bool]:
         # Llama dinámicamente a la estrategia que toca
         return self.fases[self.fase_actual].calcular_reward(s, action, info_entorno, pasos)
 

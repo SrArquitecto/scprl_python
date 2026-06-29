@@ -9,7 +9,7 @@ from stable_baselines3.common.torch_layers import BaseFeaturesExtractor
 class SCPFeaturesExtractor(BaseFeaturesExtractor):
     """
     Extractor multi-rol con CTDE aproximado.
- 
+
     Arquitectura:
     ┌─────────────────────────────────────────────────────┐
     │  TRUNK COMPARTIDO (todos los roles)                 │
@@ -24,36 +24,65 @@ class SCPFeaturesExtractor(BaseFeaturesExtractor):
     Scientist)  Guard)         096, 173...)
         └──────────┴──────────────┘
                    │  256 dim → actor_feat
-                   │
     ┌──────────────▼──────────────────────┐
     │  CRÍTICO CTDE: trunk + NearPlayers  │
     │  players_encoder → 64 dim           │
     │  critic_head(320) → 256 dim         │
     └─────────────────────────────────────┘
-                   │  256 dim → critic_feat
- 
     Output: [actor_feat | critic_feat] → 512 dim
-    SB3 usa [:256] para pi y [256:] para vf.
- 
-    El rol se lee de obs en cada forward — el cambio de rol
-    tras respawn es transparente, activa otra cabeza sin
-    reiniciar el modelo.
- 
+
+    RoleTypeId (sbyte) normalizado como (float)roleId / 23.0 en C#.
+    Los IDs NO son contiguos por grupo — usamos lookup exacto.
+
     Curriculum:
       Fase 0-1: solo ClassD → trunk + head_surv aprenden
       Fase 2:   NTF/Chaos → head_combat (transfer desde head_surv)
       Fase 3:   SCPs → head_scp (trunk ya maduro)
     """
- 
-    # Rangos de RoleId normalizado para identificar el grupo
-    # Ajustar si cambia la normalización de RoleId en C# (RoleId/MAX_ROLE)
-    _ROLE_SURV_MAX   = 0.10   # ClassD~0.00, Scientist~0.03
-    _ROLE_COMBAT_MAX = 0.50   # Guard~0.12, NTF~0.2-0.4, Chaos~0.4-0.5
-    # > 0.50 → SCP
- 
+
+    # ── RoleId normalizado por rol (sbyte / 23.0) ─────────────────────────
+    # RoleTypeId enum: None=-1, Scp173=0, ClassD=1, Spectator=2, Scp106=3,
+    # NtfSpecialist=4, Scp049=5, Scientist=6, Scp079=7, ChaosConscript=8,
+    # Scp096=9, Scp0492=10, NtfSergeant=11, NtfCaptain=12, NtfPrivate=13,
+    # Tutorial=14, FacilityGuard=15, Scp939=16, CustomRole=17,
+    # ChaosRifleman=18, ChaosMarauder=19, ChaosRepressor=20, Scp3114=23
+    _MAX_ROLE_ID = 31.0
+
+    # IDs normalizados de cada grupo — lookup exacto porque los rangos se solapan
+    # (ej: Scientist=0.26 y NtfSpecialist=0.17 se cruzan en rango continuo)
+    _IDS_SURV = {
+        round(1  / _MAX_ROLE_ID, 6),   # ClassD
+        round(6  / _MAX_ROLE_ID, 6),   # Scientist
+    }
+    _IDS_COMBAT = {
+        round(4  / _MAX_ROLE_ID, 6),   # NtfSpecialist
+        round(8  / _MAX_ROLE_ID, 6),   # ChaosConscript
+        round(11 / _MAX_ROLE_ID, 6),   # NtfSergeant
+        round(12 / _MAX_ROLE_ID, 6),   # NtfCaptain
+        round(13 / _MAX_ROLE_ID, 6),   # NtfPrivate
+        round(15 / _MAX_ROLE_ID, 6),   # FacilityGuard
+        round(18 / _MAX_ROLE_ID, 6),   # ChaosRifleman
+        round(19 / _MAX_ROLE_ID, 6),   # ChaosMarauder
+        round(20 / _MAX_ROLE_ID, 6),   # ChaosRepressor
+    }
+    _IDS_SCP = {
+        round(0  / _MAX_ROLE_ID, 6),   # Scp173
+        round(3  / _MAX_ROLE_ID, 6),   # Scp106
+        round(5  / _MAX_ROLE_ID, 6),   # Scp049
+        round(7  / _MAX_ROLE_ID, 6),   # Scp079
+        round(9  / _MAX_ROLE_ID, 6),   # Scp096
+        round(10 / _MAX_ROLE_ID, 6),   # Scp0492 (zombie 049)
+        round(16 / _MAX_ROLE_ID, 6),   # Scp939
+        round(23 / _MAX_ROLE_ID, 6),   # Scp3114
+    }
+
+    # Tensor de lookup precalculado (se construye en el primer forward)
+    # shape (N_ROLES,) con valor 0=surv, 1=combat, 2=scp
+    _ROLE_GROUP_CACHE: dict[float, int] = {}
+
     # RoleId está en posición 1 del bloque base (base[0]=FactionId, base[1]=RoleId)
     _ROLE_ID_OFFSET = 1
- 
+
     # NearPlayers: base(45)+danio(5)+rooms(60)+whiskers(16)+zones(7)
     #              +rooms_oh(67)+items(45)+doors(150)+lifts(39)+lockers(45) = 479
     _PLAYERS_OFFSET = 479
@@ -123,11 +152,29 @@ class SCPFeaturesExtractor(BaseFeaturesExtractor):
             nn.ReLU(),
         )
 
+    @classmethod
+    def _role_group(cls, role_id_norm: float) -> int:
+        """Clasifica un RoleId normalizado en 0=surv, 1=combat, 2=scp."""
+        r = round(role_id_norm, 6)
+        if r in cls._IDS_SURV:   return 0
+        if r in cls._IDS_COMBAT: return 1
+        if r in cls._IDS_SCP:    return 2
+        return 0  # fallback seguro: tratar desconocido como supervivencia
+
     def _role_masks(self, role_ids: torch.Tensor):
-        """Devuelve tres máscaras booleanas (B,) según el RoleId normalizado."""
-        m_surv   = role_ids <= self._ROLE_SURV_MAX
-        m_combat = (role_ids > self._ROLE_SURV_MAX) & (role_ids <= self._ROLE_COMBAT_MAX)
-        m_scp    = role_ids > self._ROLE_COMBAT_MAX
+        """
+        Devuelve tres máscaras booleanas (B,) por grupo de rol.
+        Usa lookup exacto en lugar de thresholds continuos porque los
+        IDs de RoleTypeId no son contiguos por grupo (SCPs y humanos
+        están mezclados en el enum).
+        """
+        groups = torch.tensor(
+            [self._role_group(r.item()) for r in role_ids],
+            dtype=torch.long, device=role_ids.device
+        )
+        m_surv   = groups == 0
+        m_combat = groups == 1
+        m_scp    = groups == 2
         return m_surv, m_combat, m_scp
  
     def forward(self, observations: torch.Tensor) -> torch.Tensor:

@@ -4,8 +4,14 @@ from gymnasium import spaces
 
 
 
-# ── Acciones (idénticas a v3) ────────────────────────────────────────────
-N_ACTIONS = 16
+# ── Acciones ──────────────────────────────────────────────────────────────
+# 0  NOOP
+# 1-5  MOVE_FORWARD / BACKWARD / RIGHT / LEFT / SPRINT
+# 6-9  CAM_UP / DOWN / RIGHT / LEFT
+# 10 INTERACT, 11 PICK_ITEM, 12 EQUIP_KEYCARD
+# 13-19 Inventario humano: DROP, EQUIP_PRIMARY/SECONDARY/MEDICAL/GRENADE, RELOAD, USE_ITEM
+# 20-22 SCP_ABILITY_PRIMARY/SECONDARY/TERTIARY
+N_ACTIONS = 23
 
 ACTION_NAMES = {
     0: "W",           # adelante
@@ -54,8 +60,6 @@ N_NAV_FEAT      = 8     # wall×4 + door dist/yaw + area + shape (room nav)
 
 # 5 frames apilados
 HISTORY_LEN = 5
-
-N_ACTIONS = 16
 
 VEC_DIM2 = (
     N_BASE

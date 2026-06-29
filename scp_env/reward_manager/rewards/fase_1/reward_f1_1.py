@@ -46,7 +46,7 @@ class Fase1SalirHabitacion(RewardBase):
         self._ce_last_breakdown     = {}
         self._ep_steps = 0
         
-    def calcular_reward(self, s: dict, action: int, info_entorno: dict, _ep_steps) -> float:
+    def calcular_reward(self, s: dict, action: int, info_entorno: dict, _ep_steps) -> tuple[float, bool]:
         """State machine reward: INIT → LOCALIZED → AT_DOOR → OPENED → CROSSED.
 
         - INIT:     no ha visto la puerta todavía. Bonus por girar (buscar).
@@ -59,12 +59,14 @@ class Fase1SalirHabitacion(RewardBase):
         """
         r, breakdown = self._compute_cell_escape_reward(s, action)
         self._ce_last_breakdown = breakdown
+        terminated = False
         # Telemetría periódica del breakdown
         self._ep_steps = _ep_steps
         if self._ep_steps % 100 == 0 and breakdown:
             bd_str = " | ".join(f"{k}:{v:+.2f}" for k, v in breakdown.items() if abs(v) > 0.001)
             print(f"   [CE-Reward] {bd_str}")
-        return r
+            
+        return r, terminated
 
     def _compute_cell_escape_reward(self, s, a):
         r = 0.0
@@ -74,13 +76,16 @@ class Fase1SalirHabitacion(RewardBase):
         pos   = np.array([float(s["PosX"]), float(s["PosY"]), float(s["PosZ"])])
         yaw   = float(s["Yaw"])    # -1..1 (0=forward, 0.5=right, ±1=back)
         pitch = float(s["Pitch"])  # -1..1
-
+        
         # Guardar spawn pos la primera vez (para detectar "haber salido")
         if self._ce_initial_spawn_pos is None:
             self._ce_initial_spawn_pos = pos.copy()
+            
+        if self._ep_steps == 0 and float(np.linalg.norm(pos - self._ce_initial_spawn_pos)) >= TELEPORT_THRESHOLD:
+            self._ce_initial_spawn_pos = pos.copy()
 
         # ── Detectar puerta en FOV ───────────────────────────────────────
-        door_info = self._ce_find_door_in_fov(s, pos, yaw)
+        door_info = self._ce_find_door_in_fov(s, pos, yaw, pitch)
 
         # ── Transición INIT → LOCALIZED (primera vez que ve la puerta) ──
         if door_info is not None and self._ce_state == "INIT":
@@ -116,7 +121,7 @@ class Fase1SalirHabitacion(RewardBase):
                 bd["approach"] = r_approach
 
             # Bonus por seguir mirando la puerta
-            facing = self._ce_is_facing_door(pos, yaw)
+            facing = self._ce_is_facing_door(pos, yaw, pitch)
             if facing:
                 r += CE_R_FACING_DOOR
                 bd["facing"] = CE_R_FACING_DOOR
@@ -197,7 +202,7 @@ class Fase1SalirHabitacion(RewardBase):
     # Helpers del cell-escape reward
     # ─────────────────────────────────────────────────────────────────────
 
-    def _ce_find_door_in_fov(self, s, pos, yaw):
+    def _ce_find_door_in_fov(self, s, pos, pitch, yaw):
         """Detecta la puerta más cercana dentro del FOV. Retorna {pos, is_open} o None."""
         near_doors = s.get("NearDoors", [])
         if not near_doors:
@@ -212,34 +217,63 @@ class Fase1SalirHabitacion(RewardBase):
                 pos[1] + float(d.get("RealRelY", 0.0)),
                 pos[2] + float(d.get("RealRelZ", 0.0))
             ])
-            if self._ce_is_in_fov(pos, yaw, door_pos, CE_DOOR_FOV):
+            if self._ce_is_in_fov(pos, yaw, pitch, door_pos, CE_DOOR_FOV):
                 candidates.append((dist, door_pos, bool(d.get("IsOpen", False))))
         if not candidates:
             return None
         candidates.sort(key=lambda x: x[0])
         return {"pos": candidates[0][1], "is_open": candidates[0][2]}
 
-    def _ce_is_in_fov(self, pos, yaw, target_pos, fov_normalized):
-        """¿Target dentro del FOV? yaw y fov en -1..1 (1 = 180°)."""
+    def _ce_is_in_fov(self, pos, yaw, pitch, target_pos, fov_normalized):
+        """¿Target dentro del FOV horizontal y vertical? yaw, pitch y fov en -1..1 (1 = 180°)."""
         dx = target_pos[0] - pos[0]
+        dy = target_pos[1] - pos[1]  # Altura (Vertical)
         dz = target_pos[2] - pos[2]
-        if abs(dx) < 0.01 and abs(dz) < 0.01:
-            return True
-        # Ángulo al target normalizado: arctan2(dx, dz) / pi
-        target_angle = np.arctan2(dx, dz) / np.pi  # -1..1
-        diff = target_angle - yaw
-        # Wrap-around (yaw 0.9 vs target -0.9 → diff debería ser -0.2, no 1.8)
-        if diff > 1.0:
-            diff -= 2.0
-        elif diff < -1.0:
-            diff += 2.0
-        return abs(diff) < fov_normalized / 2
+        
+        # Distancia horizontal en el plano XZ
+        dist_hz = np.sqrt(dx**2 + dz**2)
+        
+        # Si está colapsado en la misma posición horizontal
+        if dist_hz < 0.01:
+            # Si también está cerca en la vertical, está en el mismo punto
+            if abs(dy) < 0.01:
+                return True
+            # Si está justo arriba o abajo, calculamos el pitch directamente (90° o -90°)
+            target_pitch = 0.5 if dy > 0 else -0.5
+        else:
+            # Ángulo vertical al target normalizado: arctan2(dy, dist_hz) / pi
+            # Esto da un rango de -0.5 (mirar abajo -90°) a 0.5 (mirar arriba 90°)
+            target_pitch = np.arctan2(dy, dist_hz) / np.pi  # -0.5 .. 0.5
 
-    def _ce_is_facing_door(self, pos, yaw):
+        # 1. VALIDACIÓN DEL PITCH (VERTICAL)
+        diff_pitch = target_pitch - pitch
+        # Corrección de wrap-around para pitch (solo si tu entorno permite dar "vueltas de campana" completas, 
+        # si el pitch está limitado a -90° y 90° como en la mayoría de FPS, esto casi nunca se activará)
+        if diff_pitch > 1.0:
+            diff_pitch -= 2.0
+        elif diff_pitch < -1.0:
+            diff_pitch += 2.0
+            
+        # Si se sale del FOV vertical, ya no hace falta calcular el horizontal
+        if abs(diff_pitch) > fov_normalized / 2:
+            return False
+
+        # 2. VALIDACIÓN DEL YAW (HORIZONTAL) - Tu lógica original
+        target_angle = np.arctan2(dx, dz) / np.pi  # -1..1
+        diff_yaw = target_angle - yaw
+        
+        if diff_yaw > 1.0:
+            diff_yaw -= 2.0
+        elif diff_yaw < -1.0:
+            diff_yaw += 2.0
+            
+        return abs(diff_yaw) < fov_normalized / 2
+
+    def _ce_is_facing_door(self, pos, yaw, pitch):
         """¿El agente está mirando a la puerta?"""
         if self._ce_door_pos is None:
             return False
-        return self._ce_is_in_fov(pos, yaw, self._ce_door_pos, CE_DOOR_FOV)
+        return self._ce_is_in_fov(pos, yaw, pitch, self._ce_door_pos, CE_DOOR_FOV)
 
     def _ce_check_door_open(self, s):
         """¿Alguna puerta en NearDoors está abierta? Usa el flag agregado del C#."""

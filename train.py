@@ -197,7 +197,7 @@ if __name__ == "__main__":
         total_timesteps = 1_000_000,
         callback = [
             callback,
-            MapRegenCallback(regen_every=10000),
+            MapRegenCallback(regen_every=51_200),
             EpisodeLoggerCallback(),
             CheckpointCallback(
                 save_freq   = 8_192,

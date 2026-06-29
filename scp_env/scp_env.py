@@ -53,7 +53,7 @@ class Scp_env(gym.Env):
         
         self.current_role = "ClassD"
         
-        self._ep_steps       = 0
+        self._ep_steps = 0
         self._ep_reward = 0
         
         self.comunicacion.conexion()
@@ -96,25 +96,30 @@ class Scp_env(gym.Env):
             return self.observacion.empty_obs(), 0.0, False, False, {}
 
         pos = np.array([float(s["PosX"]), float(s["PosY"]), float(s["PosZ"])])
-
+        print(s)
         obs = self._get_obs(s)
         
         info_entorno = {"curriculum_level": self._curriculum_level} 
         
+        terminated_obs = bool(s.get("Done", False))
+        
         # 3. 🌟 LLAMADA DINÁMICA AL REWARD MANAGER
-        reward = self.reward_manager.calcular_reward(s, action, info_entorno, self._ep_steps)
+        reward, terminated_ep = self.reward_manager.calcular_reward(s, action, info_entorno, self._ep_steps)
+        
         #if self._curriculum_level == 1:
         #    res_reward = self._reward(s, action) 
         #else:
         #    res_reward = self._reward2(s, action)
         
         #reward = 0 #float(res_reward) #+ time_penalty
-        terminated = bool(s.get("Done", False))
+        terminated = terminated_obs or terminated_ep
         #print(self._ep_reward)
         self._ep_reward += reward
         self._ep_steps  += 1
 
         #print(self._ep_reward)
+        
+        """
         if self._left_spawn_room:
             print("🚪 ¡Objetivo alcanzado! Reseteando entorno de entrenamiento.")
             self.comunicacion.respawn()
@@ -129,6 +134,7 @@ class Scp_env(gym.Env):
             self.comunicacion.respawn()
             time.sleep(10) # Bajado de 5 a 2 segundos
             terminated = True
+        """
         
         # Bandera escrita por MapRegenCallback cuando regenera el mapa
         if os.path.exists("/tmp/scp_regen_flag"):
@@ -158,51 +164,8 @@ class Scp_env(gym.Env):
 
         self.current_role = "ClassD" 
         
-        self._visitadas = set()
-        self._min_dist_to_exit = None
-        self._pasos_encerrado = 0
-        self._fin_episodio = False
-        self._pos_history = []
-        self._prev_pos  = np.zeros(3)
-        self._stuck     = 0
         self._ep_reward = 0.0
         self._ep_steps  = 0
-        self._spawn_pos = None
-        self._left_spawn_room = False
-        self._left_own_cell = False
-        self._prev_yaw            = 0.0
-
-        # ── Cell-escape state machine reset ────────────────────────────────
-        self._ce_state              = "INIT"
-        self._ce_door_pos           = None
-        self._ce_prev_door_dist     = None
-        self._ce_door_was_open      = False
-        self._ce_was_facing_door    = False
-        self._ce_at_door_counter    = 0
-        self._ce_pos_history        = []
-        self._ce_localize_step      = None
-        self._ce_open_step          = None
-        self._ce_cross_step         = None
-        self._ce_initial_spawn_pos  = None
-        self._ce_door_opened        = False
-        self._ce_last_breakdown     = {}
-        #Curriculum2:
-        self._left_own_cell    = False
-        self._has_seen_door = False
-        self._prev_pos = None
-        self._stuck = 0
-        self._has_seen_door = False
-        self._last_near_doors_id = None
-        self.cached_doors_dict = {}
-        self._salida_localizada = False
-        self.puerta_salida_actual = None
-        #c3
-        self._prev_dist_to_exit = None
-        self._saw_exit_door = False
-        self._left_own_cell   = False
-        self._saw_exit_door   = False
-        self._pos_history     = []
-        self._prev_yaw        = 0.0
 
         #if self._curriculum_level != 1:
         #    if random.random() < self.mix_probability:

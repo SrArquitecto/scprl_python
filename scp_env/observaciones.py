@@ -84,7 +84,7 @@ class Observacion:
         time_last_action_n = self.safe_val(s.get("TimeLastAction", 3.0))
         
         can_interact_n = float(s.get("CanInteract", 0))
-        last_action_n = self.safe_val(s.get("LastAction", 12)) / 12.0 
+        last_action_n = self.safe_val(s.get("LastAction", 0)) / 19.0
 
         forward_x = self.safe_val(s.get("ForwardX", 0.0))
         forward_z = self.safe_val(s.get("ForwardZ", 0.0))
